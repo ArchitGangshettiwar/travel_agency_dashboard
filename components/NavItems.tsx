@@ -3,7 +3,7 @@ import { Link, NavLink } from 'react-router';
 import { sidebarItems } from '~/constants';
 import { cn } from '~/lib/utils';
 
-const NavItems = () => {
+const NavItems = ({handleClick}:{handleClick?: () => void}) => {
   const user = {
     name: "John Doe",
     email: 'placeholder@mail.test',
@@ -31,7 +31,7 @@ const NavItems = () => {
                     isActive
                       ? 'bg-blue-500 text-white'
                       : 'text-gray-700 hover:bg-blue-100 hover:text-blue-700'
-                  )}
+                  )} onClick={handleClick}
                 >
                   <img
                     src={icon}
