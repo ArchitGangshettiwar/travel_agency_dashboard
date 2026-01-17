@@ -3,17 +3,21 @@ import TripCard from 'components/TripCard';
 import StatsCard from 'components/StatsCard';
 import React from 'react';
 import { dashboardStats, user, allTrips } from '~/constants';
-
+import { getUser } from '~/appwrite/auth';
+import type {Route} from './+types/dashboard'
 const{ totalUsers, usersJoined, totalTrips,tripsCreated, userRole} = dashboardStats;
-const Dashboard = () => {
-  
+
+export const ClientLoader = async () => await getUser();
 
 
+const Dashboard = ({loaderData}:Route.ComponentProps) => {
+
+const userData = loaderData as any;
 
   return (
     <main className='dashboard wrapper'>
      <Header
-     title={`Welcome ${user?.name ?? 'Guest'}👋`}
+     title={`Welcome ${userData?.name ?? 'Guest'}👋`}
      description="Track activity, trends and popular destinations in rela time"
 
      />
@@ -64,7 +68,7 @@ const Dashboard = () => {
        imageUrl={imageUrls[0]}
        location={itinerary?.[0]?.location ?? ' '}
        tags={tags}
-       price={estimatedPrice}
+       price={typeof estimatedPrice === 'string' ? parseFloat(estimatedPrice.replace('$', '').replace(',', '')) : estimatedPrice}
 
       />
       ))}

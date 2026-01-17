@@ -40,8 +40,10 @@ export const storeUserData = async () => {
     );
 
     if (!createdUser.$id) redirect("/sign-in");
+    return createdUser;
   } catch (error) {
     console.error("Error storing user data:", error);
+    throw error;
   }
 };
 

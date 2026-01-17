@@ -66,7 +66,7 @@ const TripCard = ({
           </ChipsDirective>
         </ChipListComponent>
       </div>
-      <article className='tripCard-pill'>{price}</article>
+      <article className='tripCard-pill'>${isNaN(price) ? '0' : price?.toLocaleString()}</article>
     </Link>
   )
 }
