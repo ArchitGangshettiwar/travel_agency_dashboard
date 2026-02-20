@@ -1,7 +1,5 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import OpenAI from "openai";
 import type { ActionFunctionArgs } from "react-router";
-import {parseMarkdownToJson } from "~/lib/utils";
-//import {createProduct} from "~/lib/stripe";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
     const {
@@ -12,13 +10,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         budget,
         groupType,
         userId,
-
     } = await request.json();
 
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+    const client = new OpenAI({
+        apiKey: process.env.GROQ_API_KEY!,
+        baseURL: "https://api.groq.com/openai/v1",
+    });
+
     const unsplashApiKey = process.env.UNSPLASH_ACCESS_KEY!;
 
-    try{
+    try {
         const prompt = `Generate a ${numberOfDays}-day travel itinerary for ${country} based on the following user information:
     Budget: '${budget}'
     Interests: '${interests}'
@@ -33,19 +34,19 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     "budget": "${budget}",
     "travelStyle": "${travelStyle}",
     "country": "${country}",
-    "interests": ${interests},
+    "interests": "${interests}",
     "groupType": "${groupType}",
     "bestTimeToVisit": [
-      '🌸 Season (from month to month): reason to visit',
-      '☀️ Season (from month to month): reason to visit',
-      '🍁 Season (from month to month): reason to visit',
-      '❄️ Season (from month to month): reason to visit'
+      "🌸 Season (from month to month): reason to visit",
+      "☀️ Season (from month to month): reason to visit",
+      "🍁 Season (from month to month): reason to visit",
+      "❄️ Season (from month to month): reason to visit"
     ],
     "weatherInfo": [
-      '☀️ Season: temperature range in Celsius (temperature range in Fahrenheit)',
-      '🌦️ Season: temperature range in Celsius (temperature range in Fahrenheit)',
-      '🌧️ Season: temperature range in Celsius (temperature range in Fahrenheit)',
-      '❄️ Season: temperature range in Celsius (temperature range in Fahrenheit)'
+      "☀️ Season: temperature range in Celsius (temperature range in Fahrenheit)",
+      "🌦️ Season: temperature range in Celsius (temperature range in Fahrenheit)",
+      "🌧️ Season: temperature range in Celsius (temperature range in Fahrenheit)",
+      "❄️ Season: temperature range in Celsius (temperature range in Fahrenheit)"
     ],
     "location": {
       "city": "name of the city or region",
@@ -53,61 +54,65 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       "openStreetMap": "link to open street map"
     },
     "itinerary": [
-    {
-      "day": 1,
-      "location": "City/Region Name",
-      "activities": [
-        {"time": "Morning", "description": "🏰 Visit the local historic castle and enjoy a scenic walk"},
-        {"time": "Afternoon", "description": "🖼️ Explore a famous art museum with a guided tour"},
-        {"time": "Evening", "description": "🍷 Dine at a rooftop restaurant with local wine"}
-      ]
-    },
-    ...
+      {
+        "day": 1,
+        "location": "City/Region Name",
+        "activities": [
+          {"time": "Morning", "description": "🏰 Visit the local historic castle and enjoy a scenic walk"},
+          {"time": "Afternoon", "description": "🖼️ Explore a famous art museum with a guided tour"},
+          {"time": "Evening", "description": "🍷 Dine at a rooftop restaurant with local wine"}
+        ]
+      }
     ]
     }`;
 
-    const textResult = await genAI
-          .getGenerativeModel({model: "gemini-2.0-flash"})
-          .generateContent([prompt]);
+        // Call Groq API
+        const completion = await client.chat.completions.create({
+            model: "openai/gpt-oss-20b",
+            messages: [{ role: "user", content: prompt }],
+        });
 
-          const trip = parseMarkdownToJson(textResult.response.text());
+        const rawText = completion.choices[0]?.message?.content || "";
 
-          const imageResponse = await fetch(
+        // Strip markdown code fences if Groq returns them despite instructions
+        const jsonText = rawText.replace(/```json|```/g, "").trim();
+
+        let trip: any;
+        try {
+            trip = JSON.parse(jsonText);
+        } catch (parseErr) {
+            console.error("Failed to parse Groq response as JSON:", parseErr);
+            return new Response(
+                JSON.stringify({ error: "Failed to parse AI response", raw: rawText }),
+                { status: 500, headers: { "Content-Type": "application/json" } }
+            );
+        }
+
+        // Fetch Unsplash images
+        const imageResponse = await fetch(
             `https://api.unsplash.com/search/photos?query=${country} ${interests} ${travelStyle}&client_id=${unsplashApiKey}`
         );
-
-        const imageUrls = (await imageResponse.json()).results.slice(0, 3)
+        const imageUrls = (await imageResponse.json()).results
+            .slice(0, 3)
             .map((result: any) => result.urls?.regular || null);
-        
-        const tripString = (() => {
-          try { return JSON.stringify(trip) } catch (err) { return String(trip) }
-        })();
 
-          // ensure `trip` is JSON-serializable; fall back to string if not
-          let safeTrip: any;
-          try {
-            safeTrip = JSON.parse(JSON.stringify(trip));
-          } catch (_) {
-            safeTrip = String(trip);
-          }
-
-          const payload = {
-            trip: safeTrip,
+        const payload = {
+            tripDetail: trip,
             imageUrls,
             createdAt: new Date().toISOString(),
             userId,
-          };
+        };
 
-          return new Response(JSON.stringify(payload), {
+        return new Response(JSON.stringify(payload), {
             status: 200,
-            headers: { 'Content-Type': 'application/json' },
-          });
-    }
-    catch(e){
-        console.error("Error creating trip:", e);
-        return new Response(JSON.stringify({ error: String(e) }), {
-          status: 500,
-          headers: { 'Content-Type': 'application/json' },
+            headers: { "Content-Type": "application/json" },
         });
+
+    } catch (e) {
+        console.error("Error creating trip:", e);
+        return new Response(
+            JSON.stringify({ error: String(e) }),
+            { status: 500, headers: { "Content-Type": "application/json" } }
+        );
     }
-}
+};
